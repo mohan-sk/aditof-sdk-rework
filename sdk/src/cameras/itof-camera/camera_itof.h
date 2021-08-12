@@ -148,6 +148,13 @@ class CameraItof : public aditof::Camera {
      */
     //aditof::Status writeModuleEeprom(const std::string &ccbFileName, const std::string &cfgFileName);
 
+    /**
+     * @brief Function to enable/disable onlyAB flag     
+     * @param[in] bool option: '1' for enable & '0' for disable
+     * @return None
+     */
+    void onlyABFlag(bool option) override;
+
   private:
     /**
      * @brief Default ADI module flash memory is Macronix MX25U6435F.
@@ -291,6 +298,7 @@ class CameraItof : public aditof::Camera {
      * @return Status
      * @see Status
      */
+<<<<<<< HEAD
     aditof::Status saveCCBToFile(const std::string &filePath) const;
 
     /**
@@ -313,6 +321,9 @@ class CameraItof : public aditof::Camera {
      * @see Status
      */
     aditof::Status enableXYZframe(bool en);
+=======
+    aditof::Status saveCCBToFile(const std::string &filePath) const;    
+>>>>>>> overwriting json data with module data
 
   private:
     using noArgCallable = std::function<aditof::Status()>;
