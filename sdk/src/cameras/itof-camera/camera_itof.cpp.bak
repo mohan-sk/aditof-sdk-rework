@@ -128,8 +128,6 @@ aditof::Status CameraItof::initialize() {
 
     // Parse config.json
     std::string config = m_controls["initialization_config"];
-    json_path_fs = config;
-    
     std::ifstream ifs(config.c_str());
     std::string content((std::istreambuf_iterator<char>(ifs)), (std::istreambuf_iterator<char>()));
 
@@ -138,7 +136,7 @@ aditof::Status CameraItof::initialize() {
         // Get sensorfirmware file location
         const cJSON *json_sensorFirmware_file = cJSON_GetObjectItemCaseSensitive(config_json, "sensorFirmware");
         if (cJSON_IsString(json_sensorFirmware_file) && (json_sensorFirmware_file->valuestring != NULL)) {
-            if (1) { //(m_sensorFirmwareFile.empty()) {
+            if (m_sensorFirmwareFile.empty()) {
                 // save firmware file location
                 m_sensorFirmwareFile = std::string(json_sensorFirmware_file->valuestring);
             } else {
@@ -149,7 +147,7 @@ aditof::Status CameraItof::initialize() {
         // Get calibration file location
         const cJSON *json_ccb_calibration_file = cJSON_GetObjectItemCaseSensitive(config_json, "CCB_Calibration");
         if (cJSON_IsString(json_ccb_calibration_file) && (json_ccb_calibration_file->valuestring != NULL)) {
-            if (1) { //(m_ccb_calibrationFile.empty()) {
+            if (m_ccb_calibrationFile.empty()) {
                 // save calibration file location
                 m_ccb_calibrationFile = std::string(json_ccb_calibration_file->valuestring);
             } else {
@@ -992,11 +990,6 @@ aditof::Status CameraItof::saveCCBToFile(const std::string &filePath) const {
     destination << source.rdbuf();
 
     return aditof::Status::OK;
-}
-
-void CameraItof::onlyABFlag(bool option)
-{    
-    SetABOnly(m_tofi_compute_context, (int)option);
 }
 
 aditof::Status CameraItof::saveCFGToFile(const std::string &filePath) const {

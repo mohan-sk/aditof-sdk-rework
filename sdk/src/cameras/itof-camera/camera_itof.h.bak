@@ -298,6 +298,7 @@ class CameraItof : public aditof::Camera {
      * @return Status
      * @see Status
      */
+<<<<<<< HEAD
     aditof::Status saveCCBToFile(const std::string &filePath) const;
 
     /**
