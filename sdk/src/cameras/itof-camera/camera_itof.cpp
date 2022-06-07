@@ -45,7 +45,29 @@
 #include "tofi/tofi_utils.h"
 #include "tofi/tofi_config.h"
 #include <iostream>
+#include <chrono>
 
+//#define CONVERT_12_TO_16
+#define TIME_STAMP
+
+using namespace std::chrono;
+void timestamp(std::string str);
+/**
+ *      * @brief function to capture the execution time between two tasks
+ *           * @param[in] str - time stamp string
+ *                * @return next state
+ *                     */
+auto cuTime = high_resolution_clock::now();
+auto prTime = high_resolution_clock::now();
+void timestamp(std::string str)
+{
+#ifdef TIME_STAMP
+    cuTime = high_resolution_clock::now();
+    auto dur = duration_cast<microseconds>(cuTime - prTime);
+    std::cout << str << " took " << dur.count() << " us" << std::endl;
+    prTime = cuTime;
+#endif
+}
 
 CameraItof::CameraItof(
     std::shared_ptr<aditof::DepthSensorInterface> depthSensor,
@@ -145,7 +167,7 @@ aditof::Status CameraItof::initialize() {
         // Get calibration file location
         const cJSON *json_ccb_calibration_file = cJSON_GetObjectItemCaseSensitive(config_json, "CCB_Calibration");
         if (cJSON_IsString(json_ccb_calibration_file) && (json_ccb_calibration_file->valuestring != NULL)) {
-            if (1) { //(m_ccb_calibrationFile.empty()) {
+            if (1) {//(m_ccb_calibrationFile.empty()) {
                 // save calibration file location
                 m_ccb_calibrationFile = std::string(json_ccb_calibration_file->valuestring);
             } else {
@@ -375,8 +397,8 @@ aditof::Status CameraItof::requestFrame(aditof::Frame *frame,
     Status status = Status::OK;
     std::string totalCapturesStr;
     uint8_t totalCaptures;
-     ModeInfo::modeInfo aModeInfo;
-
+    ModeInfo::modeInfo aModeInfo;
+    
     if (frame == nullptr){
         return Status::INVALID_ARGUMENT;
     }
@@ -410,8 +432,9 @@ aditof::Status CameraItof::requestFrame(aditof::Frame *frame,
     uint16_t *embedFrame = nullptr;
     frame->getData("frameData", &embedFrame);
 
+    timestamp("setup sensor");
     status = m_depthSensor->getFrame(embedFrame);
-
+    timestamp("capture from sensor");
     if (status != Status::OK) {
         LOG(WARNING) << "Failed to get embedded frame from device";
         return status;
@@ -438,11 +461,14 @@ aditof::Status CameraItof::requestFrame(aditof::Frame *frame,
         return status;
     }
 
+#ifdef CONVERT_12_TO_16
+    std::cout << "Conversion enabled" << std::endl;
     for (unsigned int i = 0; i < (m_details.frameType.height * m_details.frameType.width * totalCaptures); ++i) {
         frameDataLocation[i] = frameDataLocation[i] >> 4;
         frameDataLocation[i] = Convert11bitFloat2LinearVal(frameDataLocation[i]);
     }
-
+#endif
+    
     if ((totalCaptures > 1) && (m_controls["enableDepthCompute"] == "on")) {
 
         if (NULL == m_tofi_compute_context) {
@@ -455,7 +481,7 @@ aditof::Status CameraItof::requestFrame(aditof::Frame *frame,
             LOG(INFO) << "TofiCompute failed";
             return Status::GENERIC_ERROR;
         }
-
+        timestamp("Get ABOnly");
         uint16_t *depthFrameLocation;
         frame->getData("depth", &depthFrameLocation);
         memcpy(depthFrameLocation, (uint8_t *)m_tofi_compute_context->p_depth_frame,
@@ -464,9 +490,9 @@ aditof::Status CameraItof::requestFrame(aditof::Frame *frame,
         uint16_t *irFrameLocation;
         frame->getData("ir", &irFrameLocation);
         memcpy(irFrameLocation, m_tofi_compute_context->p_ab_frame, (m_details.frameType.height * m_details.frameType.width * sizeof(uint16_t)));
-
+        timestamp("Copy ab and ir frame buffer from fallout");
         applyCalibrationToFrame(frameDataLocation, std::atoi(m_details.mode.c_str()));
-
+        timestamp("Calibration");
         if (m_xyzEnabled) {
             uint16_t* xyzFrameLocation;
             frame->getData("xyz", &xyzFrameLocation);
@@ -580,16 +606,21 @@ aditof::Status CameraItof::initComputeLibrary(void) {
     if (m_loadedConfigData) {
         ConfigFileData calData = {m_calData, calFileSize};
         uint32_t status = ADI_TOFI_SUCCESS;
+    
+    std::string config = "./config/Config.json";//m_controls["initialization_config"];
+    std::ifstream ifs(config.c_str());
+    std::string content((std::istreambuf_iterator<char>(ifs)), (std::istreambuf_iterator<char>()));
+    //std::cout << content ;
+    ConfigFileData jsonData = {(uint8_t *)content.c_str(), content.size()};
 
         if (!m_ini_depth.empty()) {
             uint8_t *tempDataParser = new uint8_t[iniFileSize];
             memcpy(tempDataParser, m_depthINIData, iniFileSize);
             ConfigFileData depth_ini = {tempDataParser, iniFileSize};
-            m_tofi_config = InitTofiConfig(&calData, NULL, &depth_ini, convertedMode, &status);
-            delete[] tempDataParser;
-
+            m_tofi_config = InitTofiConfig(&calData, &jsonData , &depth_ini, convertedMode, &status);
+            delete[] tempDataParser;	    
         } else {
-            m_tofi_config = InitTofiConfig(&calData, NULL, NULL, convertedMode, &status);
+            m_tofi_config = InitTofiConfig(&calData, &jsonData , NULL, convertedMode, &status);
         }
 
         if ((m_tofi_config == NULL) || (m_tofi_config->p_tofi_cal_config == NULL) || (status != ADI_TOFI_SUCCESS)) {
@@ -664,7 +695,7 @@ aditof::Status CameraItof::loadConfigData(void) {
         }
         status = LoadFileContents(m_ccb_calibrationFile.c_str(), m_calData, &calFileSize);
         if (status == 0) {
-	   LOG(INFO) << m_ccb_calibrationFile.c_str();
+	   		LOG(INFO) << m_ccb_calibrationFile.c_str();
            return retErr;
         }
     }
@@ -961,5 +992,5 @@ aditof::Status CameraItof::saveCCBToFile(const std::string &filePath) const {
 
 void CameraItof::onlyABFlag(bool option)
 {    
-    tofi_onlyABFlag(m_tofi_compute_context, (int)option);
+    TofiSetABOnly(m_tofi_compute_context, (int)option);
 }
